@@ -18,6 +18,19 @@ music.export("songs/acid.strudel", "out/acid.mp3", cycles=16)
 music.export("songs/acid.strudel", "out/acid.wav", stems=True)  # acid.drums.wav, ...
 ```
 
+## Examples
+
+`examples/` has six tracks. Play one with `music.play("examples/house.strudel")`.
+
+| Track | Style | Layers |
+| --- | --- | --- |
+| `acid.strudel` | Acid techno, 128 BPM | TR-909 drums, sawtooth bass under a moving filter, square stabs |
+| `house.strudel` | Classic house, 124 BPM | TR-909 drums, organ chords, sawtooth bass |
+| `lofi.strudel` | Lo-fi hip hop, 78 BPM | TR-808 drums, piano chords, triangle bass, vibraphone |
+| `jazz.strudel` | Jazz waltz | rim and hi-hat, walking bass, piano comping, saxophone |
+| `ambient.strudel` | Ambient, 60 BPM | sine pads, kalimba arpeggio, triangle shimmer |
+| `chiptune.strudel` | 8-bit, 150 BPM | square lead, pulse bass, noise hats, triangle kick |
+
 ## Tools
 
 | Tool | Does |

@@ -56,6 +56,10 @@ function githubUrl(spec) {
   return `https://raw.githubusercontent.com/${dir}/strudel.json`;
 }
 
+// A URL that fetch accepts. Escapes that the map already has, such as %23
+// for '#', stay as they are; raw spaces and other raw characters get escaped.
+export const encodeUrl = (url) => encodeURI(url).replace(/%25([0-9a-fA-F]{2})/g, '%$1');
+
 export class Sounds {
   constructor(cacheDir, { offline = false } = {}) {
     this.cacheDir = cacheDir;
@@ -164,17 +168,23 @@ export class Sounds {
     return join(this.cacheDir, 'files', createHash('sha256').update(url).digest('hex').slice(0, 32) + ext);
   }
 
+  // Where the file of `url` is on disk: the file itself, or its cache entry.
+  localPath(url) {
+    if (url.startsWith('file://')) return fileURLToPath(url);
+    if (url.startsWith('/')) return url;
+    return this.cachePath(url);
+  }
+
   // The local path of a sample file, downloaded once. The write is atomic, so an
   // interrupted download leaves no partial file.
   async file(url) {
+    const path = this.localPath(url);
     if (url.startsWith('file://') || url.startsWith('/')) {
-      const path = url.startsWith('file://') ? fileURLToPath(url) : url;
       if (!existsSync(path)) throw new Error(`missing sample file ${path}`);
       return path;
     }
-    const path = this.cachePath(url);
     if (existsSync(path)) return path;
-    const res = await fetch(encodeURI(decodeURI(url)));
+    const res = await fetch(encodeUrl(url));
     if (!res.ok) throw new Error(`${res.status} for ${url}`);
     const tmp = `${path}.${process.pid}.part`;
     writeFileSync(tmp, Buffer.from(await res.arrayBuffer()));

@@ -1,0 +1,6 @@
+// Chiptune: square and pulse waves like an 8-bit game, with white noise hats.
+setcpm(150/4)
+lead: note("<[c5 e5 g5 c6] [a4 c5 e5 a5] [f4 a4 c5 f5] [g4 b4 d5 g5]>*2").s("square").decay(.08).sustain(.3).gain(1.2)
+bass: note("<c3 a2 f2 g2>*8").s("pulse").decay(.1).sustain(.5).gain(1.2)
+noise: s("[~ white]*4").decay(.04).sustain(0).gain(1)
+kick: s("triangle*4").note("c2").decay(.12).sustain(0).gain(1.6)

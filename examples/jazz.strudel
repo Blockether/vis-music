@@ -1,0 +1,6 @@
+// Jazz waltz: rim and hi-hat brushes, a walking bass and a saxophone line.
+setcpm(96/3)
+drums: s("[rim ~ ~], hh*3").bank("RolandTR909").gain(.4)
+bass: note("<[d2 f2 a2] [g2 b2 d3] [c2 e2 g2] [a1 c#2 e2]>").s("triangle").lpf(900).gain(1.1)
+comp: chord("<Dm7 G7 Cmaj7 A7>").voicing().struct("~ x x").s("piano").gain(.55)
+sax: n("<[2 4 ~] [3 ~ 1] [0 2 4] [6 5 ~]>").scale("D4:dorian").s("sax").room(.4).gain(1.4)

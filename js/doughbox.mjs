@@ -6,8 +6,9 @@ export class Doughbox {
   constructor(binary) {
     this.proc = spawn(binary, [], { stdio: ['pipe', 'pipe', 'inherit'] });
     this.waiting = [];
-    this.files = new Map(); // local path -> file index
-    this.failed = new Set();
+    this.files = new Map(); // local path -> Promise of its file index, or null
+    this.ready = new Map(); // local path -> file index, or null, once loaded
+    this.nextIndex = 0;
     this.exited = false;
     this.proc.on('exit', () => {
       this.exited = true;
@@ -41,18 +42,27 @@ export class Doughbox {
     });
   }
 
-  // The file index of a local sample file, decoded once in this process.
-  async load(path, freq) {
-    if (this.files.has(path)) return this.files.get(path);
-    if (this.failed.has(path)) return null;
-    const index = this.files.size + this.failed.size;
-    const answer = await this.ask(`load ${index} ${freq} ${path}`);
-    if (answer[2] !== 'ok') {
-      this.failed.add(path);
-      return null;
+  // The file index of a local sample file, decoded once in this process. Loads
+  // run at the same time, so the index is taken before the first await: two
+  // files never share one index.
+  load(path, freq) {
+    if (!this.files.has(path)) {
+      const index = this.nextIndex++;
+      this.files.set(
+        path,
+        this.ask(`load ${index} ${freq} ${path}`).then((answer) => {
+          const loaded = answer[2] === 'ok' ? index : null;
+          this.ready.set(path, loaded);
+          return loaded;
+        }),
+      );
     }
-    this.files.set(path, index);
-    return index;
+    return this.files.get(path);
+  }
+
+  // The file index of a loaded file: a number, null when it failed, undefined while unknown.
+  indexOf(path) {
+    return this.ready.get(path);
   }
 
   async start() {

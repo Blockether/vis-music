@@ -150,3 +150,47 @@ def test_a_prebuild_without_the_executable_bit_runs_from_a_cache_copy(tmp_path, 
     first = engine.doughbox()
     assert first.parent == tmp_path / "cache" / "bin" / engine.platform_tag()
     assert os.access(first, os.X_OK) and engine.doughbox() == first
+
+
+def test_a_sample_url_with_escaped_characters_loads_over_http(music, tmp_path):
+    import functools
+    import http.server
+    import threading
+
+    from conftest import write_click
+
+    write_click(tmp_path / "F#4, soft.wav")
+    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(tmp_path))
+    handler.log_message = lambda *args: None
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        base = f"http://127.0.0.1:{server.server_port}/"
+        code = f"samples({{ odd: ['F%234%2C%20soft.wav'] }}, '{base}')\n$: s(\"odd*2\")"
+        result = music.export(code, str(tmp_path / "odd.wav"), cycles=1, tail=0)
+    finally:
+        server.shutdown()
+    assert result.warnings == ()
+    assert result.files[0].events == 2 and result.files[0].peak > 0
+
+
+def test_samples_that_load_together_keep_their_own_sound(music, tmp_path):
+    from conftest import write_click
+
+    write_click(tmp_path / "loud.wav")
+    with wave.open(str(tmp_path / "silent.wav"), "wb") as out:
+        out.setnchannels(1)
+        out.setsampwidth(2)
+        out.setframerate(44100)
+        out.writeframes(b"\0\0" * 4410)
+    base = tmp_path.as_uri() + "/"
+    head = f"samples({{ loud: ['loud.wav'], silent: ['silent.wav'] }}, '{base}')\n"
+
+    def render(body):
+        (file,) = music.export(head + body, str(tmp_path / "mix.wav"), cycles=2, tail=0).files
+        return file.peak, file.rms
+
+    alone = render('a: s("loud*4")')
+    assert alone[0] > 0.1
+    assert render('a: s("loud*4")\nb: s("silent*4")') == alone
+    assert render('b: s("silent*4")\na: s("loud*4")') == alone

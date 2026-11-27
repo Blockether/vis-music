@@ -19835,6 +19835,7 @@ function githubUrl(spec) {
   const dir = [owner, repo, branch, ...rest].filter(Boolean).join("/");
   return `https://raw.githubusercontent.com/${dir}/strudel.json`;
 }
+var encodeUrl = (url) => encodeURI(url).replace(/%25([0-9a-fA-F]{2})/g, "%$1");
 var Sounds = class {
   constructor(cacheDir, { offline = false } = {}) {
     this.cacheDir = cacheDir;
@@ -19933,17 +19934,22 @@ var Sounds = class {
     const ext = (extname(new URL(url, "file:///").pathname) || ".wav").slice(0, 8);
     return join(this.cacheDir, "files", createHash("sha256").update(url).digest("hex").slice(0, 32) + ext);
   }
+  // Where the file of `url` is on disk: the file itself, or its cache entry.
+  localPath(url) {
+    if (url.startsWith("file://")) return fileURLToPath(url);
+    if (url.startsWith("/")) return url;
+    return this.cachePath(url);
+  }
   // The local path of a sample file, downloaded once. The write is atomic, so an
   // interrupted download leaves no partial file.
   async file(url) {
+    const path = this.localPath(url);
     if (url.startsWith("file://") || url.startsWith("/")) {
-      const path2 = url.startsWith("file://") ? fileURLToPath(url) : url;
-      if (!existsSync(path2)) throw new Error(`missing sample file ${path2}`);
-      return path2;
+      if (!existsSync(path)) throw new Error(`missing sample file ${path}`);
+      return path;
     }
-    const path = this.cachePath(url);
     if (existsSync(path)) return path;
-    const res = await fetch(encodeURI(decodeURI(url)));
+    const res = await fetch(encodeUrl(url));
     if (!res.ok) throw new Error(`${res.status} for ${url}`);
     const tmp = `${path}.${process.pid}.part`;
     writeFileSync(tmp, Buffer.from(await res.arrayBuffer()));
@@ -19980,7 +19986,8 @@ var Doughbox = class {
     this.proc = spawn(binary, [], { stdio: ["pipe", "pipe", "inherit"] });
     this.waiting = [];
     this.files = /* @__PURE__ */ new Map();
-    this.failed = /* @__PURE__ */ new Set();
+    this.ready = /* @__PURE__ */ new Map();
+    this.nextIndex = 0;
     this.exited = false;
     this.proc.on("exit", () => {
       this.exited = true;
@@ -20011,18 +20018,26 @@ var Doughbox = class {
       }
     });
   }
-  // The file index of a local sample file, decoded once in this process.
-  async load(path, freq) {
-    if (this.files.has(path)) return this.files.get(path);
-    if (this.failed.has(path)) return null;
-    const index = this.files.size + this.failed.size;
-    const answer = await this.ask(`load ${index} ${freq} ${path}`);
-    if (answer[2] !== "ok") {
-      this.failed.add(path);
-      return null;
+  // The file index of a local sample file, decoded once in this process. Loads
+  // run at the same time, so the index is taken before the first await: two
+  // files never share one index.
+  load(path, freq) {
+    if (!this.files.has(path)) {
+      const index = this.nextIndex++;
+      this.files.set(
+        path,
+        this.ask(`load ${index} ${freq} ${path}`).then((answer) => {
+          const loaded = answer[2] === "ok" ? index : null;
+          this.ready.set(path, loaded);
+          return loaded;
+        })
+      );
     }
-    this.files.set(path, index);
-    return index;
+    return this.files.get(path);
+  }
+  // The file index of a loaded file: a number, null when it failed, undefined while unknown.
+  indexOf(path) {
+    return this.ready.get(path);
   }
   async start() {
     const answer = await this.ask("start");
@@ -28869,11 +28884,12 @@ function tick() {
     if (!p2) continue;
     let index;
     if (p2.file) {
-      index = live.box.files.get(sounds.cachePath(p2.file.url)) ?? live.box.files.get(p2.file.url);
+      index = live.box.indexOf(sounds.localPath(p2.file.url));
       if (index === void 0) {
         loadLater(p2.file);
         continue;
       }
+      if (index === null) continue;
     }
     live.box.send(`ev ${message(p2, time, durationOf(row, live.cps), index)}`);
     live.sent++;

@@ -97,11 +97,12 @@ function tick() {
     if (!p) continue;
     let index;
     if (p.file) {
-      index = live.box.files.get(sounds.cachePath(p.file.url)) ?? live.box.files.get(p.file.url);
+      index = live.box.indexOf(sounds.localPath(p.file.url));
       if (index === undefined) {
         loadLater(p.file);
         continue;
       }
+      if (index === null) continue; // the file does not decode; prepare warned
     }
     live.box.send(`ev ${message(p, time, durationOf(row, live.cps), index)}`);
     live.sent++;

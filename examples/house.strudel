@@ -1,0 +1,5 @@
+// Classic house: four on the floor, open hi-hats on the off-beat, organ stabs.
+setcpm(124/4)
+drums: s("bd*4, [~ oh]*4, ~ cp ~ cp, hh*16").bank("RolandTR909").gain("1 .8 .9 .5").gain(.6)
+organ: chord("<Am7 Dm7 G7 Cmaj7>").voicing().struct("~ x ~ x").s("organ_full").gain(.9).room(.3)
+bass: note("<a1 d2 g1 c2>*2 [~ <a2 d3 g2 c3>]").s("sawtooth").lpf(700).decay(.2).sustain(.4).gain(1.1)
