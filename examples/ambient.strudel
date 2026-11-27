@@ -1,7 +1,7 @@
 // Ambient: no drums. Slow sine pads, a kalimba arpeggio and a lot of reverb.
 setcpm(60/4)
 pad: note("<[c3,g3,eb4] [ab2,eb3,c4] [f2,c3,ab3] [g2,d3,bb3]>").s("sine")
-  .attack(1.5).release(3).room(.9).gain(.9)
-arp: n("0 2 4 7 9 7 4 2").scale("C4:minor").s("kalimba").room(.8).gain(1.3)
+  .attack(1.5).release(3).room(.9).gain(.52)
+arp: n("0 2 4 7 9 7 4 2").scale("C4:minor").s("kalimba").room(.8).gain(.75)
   .degradeBy(.3)
-shimmer: note("<g5 eb5 c5 bb5>/2").s("triangle").attack(2).release(4).room(1).gain(.5)
+shimmer: note("<g5 eb5 c5 bb5>/2").s("triangle").attack(2).release(4).room(1).gain(.29)

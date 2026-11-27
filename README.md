@@ -53,37 +53,34 @@ plays solo.
 
 ## Limitations
 
-- **Sound engine.** dough, the synthesizer of Strudel, plays the sound, not the
-  Web Audio engine of strudel.cc. A track sounds close to strudel.cc, not the
-  same. dough does not play `vowel`, `shape`, `cut`, `squiz`, `size`/`dry`,
-  `detune`, `compressor`, `duckorbit` or `unit` (so `loopAt` and `fit` do not
-  fit the sample to the cycle). `supersaw` plays as `sawtooth`. `music.check`
-  warns about each control that does not play.
-- **Sounds.** The sample maps of strudel.cc load: drum machines, piano, VCSL
-  instruments and the Dirt subset, plus any map that `samples(...)` names. The
-  General MIDI soundfonts (`gm_*`) are not available.
-- **Visuals and outputs.** `pianoroll`, `punchcard`, `scope` and the other
-  visual methods draw nothing. `.midi()`, OSC and the microphone are not
-  available.
+- **Sound engine.** superdough, the Web Audio engine of strudel.cc, plays the
+  sound on [node-web-audio-api](https://github.com/ircam-ismm/node-web-audio-api).
+  All its synths, effects, samples, soundfonts (`gm_*`), ZZFX and `loopAt`/`fit`
+  play as on strudel.cc. A sound or chord that Strudel does not know gives a
+  warning in `music.check`.
+- **Not yet available.** The visual methods (`pianoroll`, `punchcard`, `scope`
+  and others) draw nothing. `.midi()`, OSC and the microphone do not play.
 - **Live playback.** It needs an audio output device. A changed track takes over
   on time; the engine sends notes 0.25 s ahead, so a change is heard after about
   that delay. One track plays at a time.
-- **First use.** Samples download on first use, so the first play or export of
-  a new sound takes longer. After that they come from the cache, also offline.
-- **Size.** An export streams to its file, so its length has no limit; it renders
-  about 6 times faster than real time (6 minutes in about 1 minute). One render
-  or live session holds at most 4096 different sample files, about 200 MB of
-  decoded samples, and 128 notes that sound at the same time.
+- **First use.** The first use downloads the node-web-audio-api binary for this
+  platform (checked against its SHA-512) and the samples of each new sound. After
+  that they come from the cache, also offline.
+- **Linux.** The node-web-audio-api binary needs `libasound2`, `libdbus-1-3` and
+  `libpipewire-0.3-0`, also for export. Without them the engine says which
+  library is missing.
+- **Size.** An export renders about 5 times faster than real time. The render
+  stays in memory until it is written: about 21 MB for each minute of audio. One
+  render or live session plays at most 128 notes at the same time.
 
 ## How it works
 
 - `src/vis_music/engine/engine.mjs` is one Node process (bundled from `js/`). It
-  compiles Strudel code, schedules the notes and loads samples into a disk cache
-  (`~/.cache/vis-music`, or `$VIS_MUSIC_CACHE`).
-- `doughbox` is a small C program over dough, the synthesizer of Strudel, and
-  miniaudio. It plays to the speakers and renders WAV files offline. Prebuilt
-  binaries for macOS (arm64, x64), Linux (x64, arm64) and Windows (x64) are in
-  `src/vis_music/native/`; on another platform it builds once with `cc`.
+  compiles Strudel code, schedules the notes on superdough and loads samples into
+  a disk cache (`~/.cache/vis-music`, or `$VIS_MUSIC_CACHE`).
+- Live playback uses one `AudioContext` on the default output device. Each export
+  renders in a new Node process on an `OfflineAudioContext`; stems render in
+  parallel.
 - The engine is a kept runtime: the sound goes on across sandbox restarts.
 
 ## Development
@@ -91,8 +88,7 @@ plays solo.
 ```bash
 uv sync
 uv run pytest                     # offline: synths and a generated sample
-python scripts/build.py engine    # after a change in js/
-python scripts/build.py native    # macOS cc; Zig for Linux and Windows
+python scripts/build.py           # after a change in js/
 vis-agent extension install . --trust --global --save
 ```
 

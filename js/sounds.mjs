@@ -1,10 +1,13 @@
-// Sound names: the sample maps of strudel.cc, extra maps that code adds with
-// samples(...), and a disk cache for the sample files.
+// Sound sources: the synths, ZZFX sounds, General MIDI soundfonts and sample
+// maps of strudel.cc, played by superdough. Every fetch goes through a disk
+// cache, so a sound that loaded once also loads offline.
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join, extname } from 'node:path';
+import { extname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { noteToMidi } from '@strudel/core';
+import { getSoundIndex } from '@strudel/core';
+import { aliasBank, getSampleInfo, getSound, loadBuffer, registerSynthSounds, registerZZFXSounds, samples, soundMap } from 'superdough';
+import { getFontBufferSource, registerSoundfonts } from '@strudel/soundfonts';
 
 const CDN = 'https://strudel.b-cdn.net';
 
@@ -34,182 +37,130 @@ export const DIRT_SUBSET = {
 };
 export const DIRT_BASE = `${CDN}/Dirt-Samples/`;
 
-// Oscillators that dough plays itself, with the Strudel names that map to them.
-export const SYNTHS = {
-  sine: 'sine', sawtooth: 'saw', saw: 'saw', square: 'square', pulse: 'pulse', triangle: 'triangle', tri: 'triangle',
-  white: 'white', pink: 'pink', brown: 'brown', zawtooth: 'zaw', zaw: 'zaw', supersaw: 'saw',
-};
-
-const midiOf = (key) => {
-  const m = String(key).match(/^([a-gA-G])(s|#|b|f)?(-?\d+)$/);
-  if (!m) return NaN;
-  const acc = m[2] === 's' ? '#' : m[2] === 'f' ? 'b' : m[2] || '';
-  return noteToMidi(`${m[1].toLowerCase()}${acc}${m[3]}`);
-};
-
-const joinUrl = (base, path) => (/^[a-z]+:\/\//i.test(path) || path.startsWith('/') ? path : base + path);
-
-function githubUrl(spec) {
-  // github:owner/repo[/branch[/path]] -> its strudel.json
-  const [owner, repo, branch = 'main', ...rest] = spec.slice('github:'.length).split('/');
-  const dir = [owner, repo, branch, ...rest].filter(Boolean).join('/');
-  return `https://raw.githubusercontent.com/${dir}/strudel.json`;
-}
-
 // A URL that fetch accepts. Escapes that the map already has, such as %23
 // for '#', stay as they are; raw spaces and other raw characters get escaped.
 export const encodeUrl = (url) => encodeURI(url).replace(/%25([0-9a-fA-F]{2})/g, '%$1');
 
+const isLocal = (url) => url.startsWith('file://') || url.startsWith('/');
+// superdough escapes '#' as %23 in every sample URL; a path keeps its '#'.
+const localPath = (url) => (url.startsWith('file://') ? fileURLToPath(url) : url.replace(/%23/g, '#'));
+const isMap = (url) => /\.json(\?|$)/i.test(url);
+
 export class Sounds {
   constructor(cacheDir, { offline = false } = {}) {
     this.cacheDir = cacheDir;
-    this.offline = offline; // no remote default maps, for tests
-    this.index = new Map(); // lower-case name -> { files: [url] } | { pitched: [{ midi, url }] }
-    this.banks = new Set();
-    this.loadedMaps = new Set();
+    this.offline = offline; // no default maps from strudel.cc, for tests
+    this.refreshing = false; // maps come from the network first, while sounds(refresh) runs
     this.ready = null;
     mkdirSync(join(cacheDir, 'files'), { recursive: true });
     mkdirSync(join(cacheDir, 'maps'), { recursive: true });
+    const network = globalThis.fetch;
+    globalThis.fetch = (input, init) => this.fetch(String(input?.url ?? input), init, network);
   }
 
-  // Loads the default maps once. A map that fails to load is reported, not fatal.
+  cachePath(url) {
+    const hash = createHash('sha256').update(url).digest('hex').slice(0, 32);
+    if (isMap(url)) return join(this.cacheDir, 'maps', `${hash}.json`);
+    const ext = (extname(new URL(url, 'file:///').pathname) || '.wav').slice(0, 8);
+    return join(this.cacheDir, 'files', hash + ext);
+  }
+
+  // fetch for superdough: local files, then the cache, then the network. A
+  // download is written atomically, so an interrupted one leaves no file.
+  async fetch(url, init, network) {
+    if (isLocal(url)) {
+      const path = localPath(url);
+      if (!existsSync(path)) throw new Error(`missing file ${path}`);
+      return new Response(readFileSync(path));
+    }
+    const path = this.cachePath(url);
+    const cached = existsSync(path);
+    if (cached && !(this.refreshing && isMap(url))) return new Response(readFileSync(path));
+    try {
+      const res = await network(encodeUrl(url), init);
+      if (!res.ok) throw new Error(`${res.status} for ${url}`);
+      const body = Buffer.from(await res.arrayBuffer());
+      const tmp = `${path}.${process.pid}.part`;
+      writeFileSync(tmp, body);
+      renameSync(tmp, path);
+      return new Response(body);
+    } catch (e) {
+      if (cached) return new Response(readFileSync(path));
+      throw e;
+    }
+  }
+
+  // Registers the sounds of strudel.cc once. A map that fails to load is
+  // reported, not fatal.
   defaults(refresh = false) {
     if (!this.ready || refresh) {
       this.ready = (async () => {
+        registerSynthSounds();
+        registerZZFXSounds();
+        registerSoundfonts();
         const errors = [];
         if (this.offline) return errors;
-        const aliases = await this.fetchJson(DEFAULT_ALIASES, refresh).catch((e) => (errors.push(String(e.message || e)), {}));
-        for (const map of DEFAULT_MAPS) {
-          try {
-            this.addMap(await this.fetchJson(map.url, refresh), map.base, aliases);
-          } catch (e) {
-            errors.push(`${map.url}: ${e.message || e}`);
-          }
+        this.refreshing = refresh;
+        try {
+          const loads = DEFAULT_MAPS.map((map) => samples(map.url, map.base, { prebake: true }).catch((e) => errors.push(`${map.url}: ${e.message || e}`)));
+          await Promise.all(loads);
+          await samples(DIRT_SUBSET, DIRT_BASE, { prebake: true });
+          await aliasBank(DEFAULT_ALIASES).catch((e) => errors.push(`${DEFAULT_ALIASES}: ${e.message || e}`));
+        } finally {
+          this.refreshing = false;
         }
-        this.addMap(DIRT_SUBSET, DIRT_BASE);
         return errors;
       })();
     }
     return this.ready;
   }
 
-  // Adds the map that code names with samples(map | url, base).
-  async addFromCode(spec, base) {
-    if (typeof spec === 'string') {
-      const url = spec.startsWith('github:') ? githubUrl(spec) : spec;
-      if (this.loadedMaps.has(url)) return;
-      const json = await this.fetchJson(url, false);
-      const root = base || json._base || url.slice(0, url.lastIndexOf('/') + 1);
-      this.addMap(json, root);
-      this.loadedMaps.add(url);
-    } else if (spec && typeof spec === 'object') {
-      this.addMap(spec, base || spec._base || '');
-    }
+  // The registered sound of one event value, or undefined.
+  soundOf(value) {
+    const { s, bank } = value || {};
+    if (typeof s !== 'string') return undefined;
+    return getSound(bank ? `${bank}_${s}` : s);
   }
 
-  addMap(map, base, aliases = {}) {
-    const root = map._base || base || '';
-    for (const [name, value] of Object.entries(map)) {
-      if (name.startsWith('_')) continue;
-      let entry;
-      if (typeof value === 'string') entry = { files: [joinUrl(root, value)] };
-      else if (Array.isArray(value)) entry = { files: value.map((v) => joinUrl(root, v)) };
-      else if (value && typeof value === 'object') {
-        const pitched = Object.entries(value)
-          .map(([k, v]) => ({ midi: midiOf(k), url: joinUrl(root, Array.isArray(v) ? v[0] : v) }))
-          .filter((p) => !Number.isNaN(p.midi))
-          .sort((a, b) => a.midi - b.midi);
-        if (!pitched.length) continue;
-        entry = { pitched };
-      } else continue;
-      const lower = name.toLowerCase();
-      this.index.set(lower, entry);
-      const cut = name.indexOf('_');
-      if (cut > 0) {
-        const bank = name.slice(0, cut);
-        const alias = aliases[bank];
-        this.banks.add(bank.toLowerCase());
-        if (alias) {
-          this.banks.add(alias.toLowerCase());
-          this.index.set(`${alias}_${name.slice(cut + 1)}`.toLowerCase(), entry);
-        }
-      }
+  // Loads the sample file or soundfont of one event, so that its first onset
+  // sounds. Strudel loads on the first onset and skips an onset that is late.
+  async preload(value, ac) {
+    const sound = this.soundOf(value);
+    const data = sound?.data;
+    if (!data) return;
+    const key = value.bank ? `${value.bank}_${value.s}` : value.s;
+    if (data.type === 'sample') {
+      const { url, label } = getSampleInfo({ ...value, s: key }, data.samples);
+      await loadBuffer(url, ac, label);
+    } else if (data.type === 'soundfont') {
+      await getFontBufferSource(data.fonts[getSoundIndex(value.n, data.fonts.length)], value, ac);
     }
-  }
-
-  // The file for one event, or null for an unknown name. `freq` is the pitch at
-  // which the file plays unchanged: its own note, or C2 like superdough.
-  resolve(s, bank, n, note) {
-    const key = (bank ? `${bank}_${s}` : String(s)).toLowerCase();
-    const entry = this.index.get(key);
-    if (!entry) return null;
-    if (entry.files) {
-      const i = ((Math.floor(Number(n) || 0) % entry.files.length) + entry.files.length) % entry.files.length;
-      return { url: entry.files[i], midi: 36 };
-    }
-    const target = typeof note === 'number' ? note : 60;
-    let best = entry.pitched[0];
-    for (const p of entry.pitched) if (Math.abs(p.midi - target) < Math.abs(best.midi - target)) best = p;
-    return { url: best.url, midi: best.midi };
   }
 
   names(filter = '') {
     const re = filter ? new RegExp(filter, 'i') : null;
     const rows = [];
-    for (const [name, entry] of this.index) {
+    for (const [name, { data = {} }] of Object.entries(soundMap.get())) {
       if (re && !re.test(name)) continue;
-      rows.push({ name, files: entry.files ? entry.files.length : entry.pitched.length, pitched: !!entry.pitched });
+      const files = Array.isArray(data.samples) ? data.samples.length : data.samples ? Object.keys(data.samples).length : data.fonts?.length ?? 0;
+      rows.push({ name, type: data.type ?? 'other', files, pitched: !!data.samples && !Array.isArray(data.samples) });
     }
     return rows.sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  cachePath(url) {
-    const ext = (extname(new URL(url, 'file:///').pathname) || '.wav').slice(0, 8);
-    return join(this.cacheDir, 'files', createHash('sha256').update(url).digest('hex').slice(0, 32) + ext);
+  synths() {
+    return Object.entries(soundMap.get())
+      .filter(([, { data = {} }]) => data.type === 'synth')
+      .map(([name]) => name)
+      .sort();
   }
 
-  // Where the file of `url` is on disk: the file itself, or its cache entry.
-  localPath(url) {
-    if (url.startsWith('file://')) return fileURLToPath(url);
-    if (url.startsWith('/')) return url;
-    return this.cachePath(url);
-  }
-
-  // The local path of a sample file, downloaded once. The write is atomic, so an
-  // interrupted download leaves no partial file.
-  async file(url) {
-    const path = this.localPath(url);
-    if (url.startsWith('file://') || url.startsWith('/')) {
-      if (!existsSync(path)) throw new Error(`missing sample file ${path}`);
-      return path;
+  banks() {
+    const banks = new Set();
+    for (const [name, { data = {} }] of Object.entries(soundMap.get())) {
+      const cut = name.indexOf('_');
+      if (data.type === 'sample' && cut > 0) banks.add(name.slice(0, cut));
     }
-    if (existsSync(path)) return path;
-    const res = await fetch(encodeUrl(url));
-    if (!res.ok) throw new Error(`${res.status} for ${url}`);
-    const tmp = `${path}.${process.pid}.part`;
-    writeFileSync(tmp, Buffer.from(await res.arrayBuffer()));
-    renameSync(tmp, path);
-    return path;
-  }
-
-  async fetchJson(url, refresh) {
-    if (url.startsWith('file://') || url.startsWith('/')) {
-      return JSON.parse(readFileSync(url.startsWith('file://') ? fileURLToPath(url) : url, 'utf8'));
-    }
-    const path = join(this.cacheDir, 'maps', createHash('sha256').update(url).digest('hex').slice(0, 32) + '.json');
-    if (!refresh && existsSync(path)) return JSON.parse(readFileSync(path, 'utf8'));
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(`${res.status} for ${url}`);
-      const text = await res.text();
-      const json = JSON.parse(text);
-      const tmp = `${path}.${process.pid}.part`;
-      writeFileSync(tmp, text);
-      renameSync(tmp, path);
-      return json;
-    } catch (e) {
-      if (existsSync(path)) return JSON.parse(readFileSync(path, 'utf8'));
-      throw e;
-    }
+    return [...banks].sort();
   }
 }

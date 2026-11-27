@@ -171,7 +171,8 @@ PROMPT = "\n".join(
         " Pass `layers=[...]` to hear some layers alone.",
         '`music.export(track, "out/song.mp3")` renders offline to wav, mp3, flac, ogg, opus or m4a; `stems=True` writes one file for each layer.'
         " Vis shows a player for each exported file.",
-        '`music.sounds("piano|bd")` lists sample names and drum machine banks; `sawtooth`, `square`, `triangle` and `sine` are synths that need no samples.',
+        '`music.sounds("piano|bd")` lists sample names, drum machine banks and synths. superdough, the engine of strudel.cc, plays every synth,'
+        " effect, soundfont (`gm_*`) and ZZFX sound. Visual methods draw nothing; `.midi()`, OSC and the microphone do not play.",
     ]
 )
 

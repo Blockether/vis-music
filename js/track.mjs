@@ -5,30 +5,10 @@ import * as core from '@strudel/core';
 import * as mini from '@strudel/mini';
 import * as tonal from '@strudel/tonal';
 import { transpiler } from '@strudel/transpiler';
-import { SYNTHS } from './sounds.mjs';
+import * as superdough from 'superdough';
+import * as soundfonts from '@strudel/soundfonts';
 
-const { evalScope, evaluate, Pattern, stack, silence, noteToMidi } = core;
-
-// Strudel controls that dough plays. Keys are Strudel names, values dough names.
-const DOUGH_KEYS = new Map(
-  (
-    'gain postgain velocity pan speed glide pw freq ' +
-    'cutoff resonance lpattack lpdecay lpsustain lprelease lpenv ' +
-    'hcutoff hresonance hpattack hpdecay hpsustain hprelease hpenv ' +
-    'bandf bandq bpattack bpdecay bpsustain bprelease bpenv ftype ' +
-    'attack decay sustain release penv pattack pdecay psustain prelease ' +
-    'vib vibmod fm fmh fmenv fmattack fmdecay fmsustain fmrelease am amdepth rm rmdepth ' +
-    'phaser phaserrate phaserdepth phasersweep phasercenter flanger flangerrate flangerdepth flangerfeedback ' +
-    'chorus chorusrate chorusdepth chorusdelay begin end coarse crush distort distortvol ' +
-    'delay delaytime delayfeedback room roomdecay roomdamp roompredelay roomdiff orbit group voices'
-  )
-    .split(' ')
-    .map((k) => [k, k]),
-);
-DOUGH_KEYS.set('fmi', 'fmi');
-DOUGH_KEYS.set('vibrato', 'vib');
-// Controls that only choose the sound or the time, handled here.
-const HANDLED = new Set(['s', 'n', 'note', 'bank', 'clip', 'legato', 'cps', 'duration', 'dough']);
+const { evalScope, evaluate, Pattern, stack, silence } = core;
 
 let context = null; // the compile that runs now
 
@@ -56,8 +36,11 @@ for (let i = 1; i < 10; i++) {
 const pure = (v) => (v && v._Pattern ? v.__pure : v);
 let scopeReady = null;
 
-function scope(sounds) {
-  return evalScope(core, mini, tonal, {
+function scope() {
+  // The functions of strudel.cc: Strudel, superdough and the soundfonts. A load
+  // that code starts finishes before the compile answers.
+  const later = (load) => (...args) => (context.pending.push(Promise.resolve(load(...args))), silence);
+  return evalScope(core, mini, tonal, superdough, soundfonts, {
     setcps: (v) => ((context.cps = Number(pure(v))), silence),
     setCps: (v) => ((context.cps = Number(pure(v))), silence),
     setcpm: (v) => ((context.cps = Number(pure(v)) / 60), silence),
@@ -65,10 +48,9 @@ function scope(sounds) {
     hush: () => (context.layers.clear(), silence),
     all: (f) => (context.all.push(f), silence),
     each: (f) => ((context.each = f), silence),
-    samples: (spec, base) => {
-      context.pending.push(sounds.addFromCode(spec, base));
-      return silence;
-    },
+    samples: later(superdough.samples),
+    aliasBank: later(superdough.aliasBank),
+    loadSoundfont: later(soundfonts.loadSoundfont),
   });
 }
 
@@ -82,17 +64,19 @@ export const isSolo = (name) => name.length > 1 && name.startsWith('S');
 const plainSampleSources = (code) =>
   code.replace(/\bsamples\(\s*"([^"\\\n]*)"/g, (_, source) => `samples('${source.replace(/'/g, "\\'")}'`);
 
-// Strudel methods that only draw in the browser. Here they draw nothing, so a
-// track copied from strudel.cc still plays.
+// Strudel methods that draw in the browser. Here they draw nothing, so a track
+// copied from strudel.cc still plays. They replace the ones of @strudel/draw.
 const VISUALS = ['pianoroll', 'punchcard', 'spiral', 'scope', 'tscope', 'fscope', 'spectrum', 'pitchwheel', 'wordfall', 'markcss', 'draw'];
 for (const name of VISUALS) {
   for (const key of [name, `_${name}`]) {
-    if (!Pattern.prototype[key]) Pattern.prototype[key] = function () { return this; };
+    Pattern.prototype[key] = function () {
+      return this;
+    };
   }
 }
 
-export async function compile(code, sounds) {
-  if (!scopeReady) scopeReady = scope(sounds);
+export async function compile(code) {
+  if (!scopeReady) scopeReady = scope();
   await scopeReady;
   context = { layers: new Map(), anonymous: 0, cps: null, all: [], each: null, pending: [] };
   const mine = context;
@@ -144,54 +128,16 @@ export function onsets(pattern, begin, end, cps) {
     .sort((a, b) => a.cycle - b.cycle);
 }
 
-const fmt = (v) => (Number.isInteger(v) ? String(v) : String(Math.round(v * 1e6) / 1e6));
-
-// What dough needs for one event: a synth name or a sample file, and the
-// controls it plays. `warn` collects controls and sounds it cannot play.
-export function plan(value, sounds, warn) {
-  if (!value || typeof value !== 'object') {
-    warn(`a value without controls: ${JSON.stringify(value)}`);
-    return null;
+// What a listener would miss in one event: no sound at all, or a sound that
+// is not registered.
+export function problem(value, sounds) {
+  if (!value || typeof value !== 'object') return `a value without controls: ${JSON.stringify(value)}`;
+  if (value.s === undefined) {
+    return value.note !== undefined || value.freq !== undefined || value.n !== undefined ? null : 'an event without a sound: add s("...") or note("...")';
   }
-  let note = value.note;
-  if (typeof note === 'string') note = noteToMidi(note);
-  const name = value.s ?? (note !== undefined || value.freq !== undefined ? 'triangle' : undefined);
-  if (name === undefined) {
-    warn('an event without a sound: add s("...") or note("...")');
-    return null;
-  }
-  const controls = [];
-  for (const [key, v] of Object.entries(value)) {
-    if (HANDLED.has(key) || key.startsWith('_')) continue;
-    const doughKey = DOUGH_KEYS.get(key);
-    if (!doughKey) {
-      warn(`control "${key}" is not played by dough`);
-      continue;
-    }
-    if (typeof v === 'number' && Number.isFinite(v)) controls.push([doughKey, v]);
-    else if (key === 'ftype' && typeof v === 'string' && /^\w+$/.test(v)) controls.push([doughKey, v]);
-  }
-  const synth = SYNTHS[String(name).toLowerCase()];
-  if (synth) {
-    if (name === 'supersaw') warn('sound "supersaw" plays as "sawtooth"');
-    return { synth, note: note ?? (value.freq === undefined ? 36 : undefined), controls };
-  }
-  const file = sounds.resolve(name, value.bank, value.n, note);
-  if (!file) {
-    warn(`unknown sound "${value.bank ? value.bank + '_' : ''}${name}"`);
-    return null;
-  }
-  return { file, note, controls };
-}
-
-// The dough message for a planned event at `time` seconds.
-export function message(planned, time, duration, fileIndex) {
-  const parts = ['dough', 'play', 'time', fmt(time), 'duration', fmt(duration)];
-  if (planned.synth) parts.push('s', planned.synth);
-  else parts.push('file', String(fileIndex));
-  if (planned.note !== undefined && Number.isFinite(planned.note)) parts.push('note', fmt(planned.note));
-  for (const [k, v] of planned.controls) parts.push(k, typeof v === 'number' ? fmt(v) : v);
-  return '/' + parts.join('/');
+  if (typeof value.s === 'string' && ['-', '~', '_'].includes(value.s)) return null;
+  if (!sounds.soundOf(value)) return `unknown sound "${value.bank ? value.bank + '_' : ''}${value.s}"`;
+  return null;
 }
 
 export function durationOf(row, cps) {

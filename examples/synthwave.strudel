@@ -1,7 +1,7 @@
 // Synthwave: gated sawtooth chords with chorus, a running octave bass and a melody with echoes.
 setcpm(100/4)
-drums: s("bd ~ ~ ~ sd ~ ~ ~, hh*8").bank("LinnDrum").gain(.5)
-bass: note("<a1 f1 c2 g1>").add(note("0 12")).fast(4).s("sawtooth").lpf(900).decay(.1).sustain(.6).gain(1.2)
-chords: chord("<Am F C G>").voicing().s("sawtooth").struct("x*8").lpf(2200).chorus(.6).decay(.15).sustain(.3).gain(.7)
+drums: s("bd ~ ~ ~ sd ~ ~ ~, hh*8").bank("LinnDrum").gain(.29)
+bass: note("<a1 f1 c2 g1>").add(note("0 12")).fast(4).s("sawtooth").lpf(900).decay(.1).sustain(.6).gain(.69)
+chords: chord("<Am F C G>").voicing().s("sawtooth").struct("x*8").lpf(2200).chorus(.6).decay(.15).sustain(.3).gain(.4)
 lead: note("<[a4 c5 e5 ~] [f4 a4 c5 ~] [e5 g5 c5 ~] [d5 b4 g4 ~]>").s("square").lpf(3000)
-  .off(1/8, x => x.add(note(12)).gain(.3)).delay(.4).delaytime(3/8).gain(.5)
+  .off(1/8, x => x.add(note(12)).gain(.17)).delay(.4).delaytime(3/8).gain(.29)

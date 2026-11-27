@@ -1,7 +1,7 @@
 // Minimal techno: Euclidean rhythms, a stereo-split hat (jux) and FM bells with echoes.
 setcpm(130/4)
-drums: s("bd*4, [~ hh]*4, rim(3,8,2), cp(2,8,4)").bank("RolandTR909").gain(.6)
-perc: s("hh(5,16)").bank("RolandTR909").jux(rev).speed("<1 1.5>").gain(.6)
+drums: s("bd*4, [~ hh]*4, rim(3,8,2), cp(2,8,4)").bank("RolandTR909").gain(.24)
+perc: s("hh(5,16)").bank("RolandTR909").jux(rev).speed("<1 1.5>").gain(.24)
 bells: n("0 <3 5> 7 <10 12>").scale("A3:minor").s("sine").fm(3).fmh(2.01)
-  .decay(.2).sustain(0).delay(.5).delaytime(3/16).delayfeedback(.55).gain(1.8)
-sub: note("a1*2 ~ a1 ~").s("sine").decay(.3).sustain(.3).gain(1.3)
+  .decay(.2).sustain(0).delay(.5).delaytime(3/16).delayfeedback(.55).gain(.72)
+sub: note("a1*2 ~ a1 ~").s("sine").decay(.3).sustain(.3).gain(.52)

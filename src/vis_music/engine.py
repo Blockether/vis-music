@@ -6,28 +6,47 @@ that started it, also across sandbox restarts, until `stop` or `shutdown`.
 
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
+import io
 import os
 import platform
 import shutil
 import sys
+import tarfile
 import threading
+import urllib.request
 import uuid
 from pathlib import Path
 
-from vis_lang_interface import ToolMissing, run, runtime
+from vis_lang_interface import ToolMissing, runtime
 
 from vis_music.errors import MusicError
 
 HERE = Path(__file__).resolve().parent
 BUNDLE = HERE / "engine" / "engine.mjs"
-NATIVE = HERE / "native"
-MIN_NODE = 18
+MIN_NODE = 20
 
+# node-web-audio-api: the Web Audio API for Node, on which superdough plays.
+# One npm tarball holds the binaries of every platform; a checked copy of it,
+# with only this platform's binary and its two JavaScript dependencies, lives in
+# the cache. The versions and checksums are those of js/package-lock.json.
+WEBAUDIO_VERSION = "2.3.0"
+WEBAUDIO_PACKAGES = {
+    "node-web-audio-api": (
+        WEBAUDIO_VERSION,
+        "pMt4Lozrg2jSiAdWpttAIFey2SH0W+dFr2o8yWWF2FjUbpc1NLyyax2W815re6vL/rfbDc9J1Y4XiLEr7144LQ==",
+    ),
+    "caller": ("1.1.0", "n+21IZC3j06YpCWaxmUy5AnVqhmCIM2bQtqQyy00HJlmStRt6kwDX5F9Z97pqwAB+G/tgSz6q/kUBbNyQzIubw=="),
+    "webidl-conversions": (
+        "8.0.1",
+        "BMhLD/Sw+GbJC21C/UgyaZX41nPt8bUTg+jWyDeg7e7YN4xOM05YPSIXceACnXVtqyEw/LMClUQMtMZ+PGGpqQ==",
+    ),
+}
 
 def cache_dir():
-    """Where downloaded samples, renders and a locally built doughbox live."""
+    """Where downloaded samples, renders and node-web-audio-api live."""
     named = os.environ.get("VIS_MUSIC_CACHE")
     if named:
         return Path(named).expanduser()
@@ -35,81 +54,77 @@ def cache_dir():
     return Path(base) / "vis-music"
 
 
-def platform_tag():
-    """This machine as a prebuild directory name, such as `macos-arm64`."""
-    system = {"darwin": "macos", "win32": "windows"}.get(sys.platform, sys.platform)
+def _binary_tag():
+    """This machine in the binary names of node-web-audio-api, such as `darwin-arm64`."""
     machine = platform.machine().lower()
     arch = {"x86_64": "x64", "amd64": "x64", "aarch64": "arm64"}.get(machine, machine)
-    return f"{system}-{arch}"
+    return f"{sys.platform}-{arch}"
 
 
-def _executable_copy(binary):
-    """An executable copy of `binary` in the cache, named by its content.
-
-    Vis can load an extension from a snapshot of its sources that drops the
-    executable bit, so the prebuild cannot run where it lies.
-    """
-    data = binary.read_bytes()
-    digest = hashlib.sha256(data).hexdigest()[:16]
-    copy = cache_dir() / "bin" / platform_tag() / f"{binary.stem}-{digest}{binary.suffix}"
-    if os.access(copy, os.X_OK):
-        return copy
-    copy.parent.mkdir(parents=True, exist_ok=True)
-    partial = copy.with_name(f".{copy.name}.{os.getpid()}.partial")
-    partial.write_bytes(data)
-    partial.chmod(0o755)
-    os.replace(partial, copy)
-    return copy
+def webaudio():
+    """The node-web-audio-api directory: `$VIS_MUSIC_WEBAUDIO`, else the cached copy."""
+    named = os.environ.get("VIS_MUSIC_WEBAUDIO")
+    if named:
+        return Path(named).expanduser()
+    home = cache_dir() / "webaudio" / WEBAUDIO_VERSION
+    if _installed(home):
+        return home
+    return _install_webaudio(home)
 
 
-def doughbox():
-    """The doughbox binary: the prebuild for this platform, else one built here."""
-    name = "doughbox.exe" if sys.platform == "win32" else "doughbox"
-    prebuilt = NATIVE / platform_tag() / name
-    if prebuilt.is_file():
-        return prebuilt if os.access(prebuilt, os.X_OK) else _executable_copy(prebuilt)
-    built = cache_dir() / "bin" / platform_tag() / name
-    if built.is_file():
-        return built
-    compiler = shutil.which("cc") or shutil.which("gcc") or shutil.which("clang")
-    if compiler is None:
-        raise ToolMissing(f"no doughbox prebuild for {platform_tag()} and no C compiler to build one")
-    built.parent.mkdir(parents=True, exist_ok=True)
-    source = NATIVE / "src"
-    libraries = ["-lm", "-lpthread", "-ldl"]
-    if sys.platform == "darwin":
-        libraries = [
-            "-lm",
-            "-lpthread",
-            "-framework",
-            "CoreAudio",
-            "-framework",
-            "AudioToolbox",
-            "-framework",
-            "CoreFoundation",
-        ]
-    temporary = built.with_suffix(".tmp")
-    done = run(
-        [
-            compiler,
-            "-std=gnu11",
-            "-O2",
-            "-w",
-            f"-I{source}",
-            f"-I{source / 'libs'}",
-            str(source / "doughbox.c"),
-            "-o",
-            str(temporary),
-            *libraries,
-        ],
-        timeout_s=600,
-        read_write=[built.parent],
-    )
-    if not done.is_ok:
-        raise MusicError(f"cannot build doughbox for {platform_tag()}: {(done.err or done.out)[-2000:]}")
-    os.replace(temporary, built)
-    return built
+def _package_dir(home, name):
+    """Where package `name` lives in the node-web-audio-api directory `home`."""
+    return home if name == "node-web-audio-api" else home / "node_modules" / name
 
+
+def _installed(home):
+    """True when `home` has every package of WEBAUDIO_PACKAGES."""
+    return all((_package_dir(home, name) / "package.json").is_file() for name in WEBAUDIO_PACKAGES)
+
+
+def _download(name, version, sha512):
+    """The checked npm tarball of one package, as bytes."""
+    url = f"https://registry.npmjs.org/{name}/-/{name}-{version}.tgz"
+    try:
+        with urllib.request.urlopen(url, timeout=120) as response:
+            data = response.read()
+    except OSError as error:
+        raise ToolMissing(f"cannot download {name} {version}: {error}") from error
+    if base64.b64encode(hashlib.sha512(data).digest()).decode() != sha512:
+        raise MusicError(f"the {name} {version} download does not match its checksum")
+    return data
+
+
+def _install_webaudio(home):
+    """Download the pinned tarballs, check them, and unpack them to `home` in one rename."""
+    tag = f".{_binary_tag()}"
+    partial = home.with_name(f".{home.name}.{os.getpid()}.partial")
+    shutil.rmtree(partial, ignore_errors=True)
+    try:
+        for name, (version, sha512) in WEBAUDIO_PACKAGES.items():
+            data = _download(name, version, sha512)
+            with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as archive:
+                members = [
+                    m
+                    for m in archive.getmembers()
+                    if m.name.startswith("package/") and (not m.name.endswith(".node") or tag in m.name)
+                ]
+                if name == "node-web-audio-api" and not any(m.name.endswith(".node") for m in members):
+                    raise ToolMissing(f"node-web-audio-api has no binary for {_binary_tag()}")
+                archive.extractall(partial / name, members=members, filter="data")
+            target = _package_dir(partial / "home", name)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(partial / name / "package", target)
+        if home.exists() and not _installed(home):
+            os.replace(home, partial / "old")  # an incomplete copy of an older vis-music
+        try:
+            os.replace(partial / "home", home)
+        except OSError:
+            if not _installed(home):
+                raise
+    finally:
+        shutil.rmtree(partial, ignore_errors=True)
+    return home
 
 def node():
     """The Node.js binary: the bundled wheel, else `node` on PATH."""
@@ -127,17 +142,17 @@ def node():
 
 def _command():
     """The argv that starts the engine."""
-    box = doughbox()
-    command = [node(), BUNDLE, "--doughbox", box, "--cache", cache_dir() / "sounds", "--build", _build(box)]
+    audio = webaudio()
+    command = [node(), BUNDLE, "--webaudio", audio, "--cache", cache_dir() / "sounds", "--build", _build(audio)]
     if os.environ.get("VIS_MUSIC_OFFLINE"):
         command.append("--offline")
     return [str(part) for part in command]
 
 
-def _build(box):
+def _build(audio):
     """A fingerprint of the engine files. A kept engine of an older build is
     replaced, because its command differs."""
-    stats = [os.stat(path) for path in (BUNDLE, box)]
+    stats = [os.stat(path) for path in (BUNDLE, audio / "package.json")]
     return hashlib.sha256(repr([(s.st_size, s.st_mtime_ns) for s in stats]).encode()).hexdigest()[:12]
 
 

@@ -133,25 +133,6 @@ def test_play_switches_layers_without_a_restart_and_stops(music, track):
     assert music.status().is_playing is False
 
 
-def test_a_prebuild_without_the_executable_bit_runs_from_a_cache_copy(tmp_path, monkeypatch):
-    from vis_music import engine
-
-    monkeypatch.setenv("VIS_MUSIC_CACHE", str(tmp_path / "cache"))
-    native = tmp_path / "native"
-    source = engine.NATIVE / engine.platform_tag()
-    if not source.is_dir():
-        pytest.skip("no prebuild for this platform")
-    (native / engine.platform_tag()).mkdir(parents=True)
-    for binary in source.iterdir():
-        target = native / engine.platform_tag() / binary.name
-        target.write_bytes(binary.read_bytes())
-        target.chmod(0o644)
-    monkeypatch.setattr(engine, "NATIVE", native)
-    first = engine.doughbox()
-    assert first.parent == tmp_path / "cache" / "bin" / engine.platform_tag()
-    assert os.access(first, os.X_OK) and engine.doughbox() == first
-
-
 def test_a_sample_url_with_escaped_characters_loads_over_http(music, tmp_path):
     import functools
     import http.server
@@ -210,3 +191,32 @@ def test_a_double_quoted_sample_source_is_a_plain_string(music, tmp_path):
 def test_visual_methods_from_strudel_cc_draw_nothing(music):
     info = music.check('note("c3 e3").s("sine").pianoroll()._punchcard({ labels: 1 }).scope()')
     assert info.events_in_4_cycles == 8
+
+
+def test_strudel_effects_and_synths_play_without_warnings(music, tmp_path):
+    code = 'note("c3 e3").s("supersaw").detune(.5).vowel("a").shape(.4).crush(6).room(.3).size(3)'
+    assert music.check(code).warnings == ()
+    (file,) = music.export(code, str(tmp_path / "fx.wav"), cycles=1, tail=0).files
+    assert file.events == 2 and file.peak > 0.05
+
+
+def test_a_long_note_outlasts_many_short_ones_in_an_export(music, samples, tmp_path):
+    code = (
+        f"samples({{ click: ['click.wav'] }}, '{samples}')\n"
+        "setcps(1)\n"
+        'pad: note("c3/4").s("sine").release(0)\n'
+        'clicks: s("click*64").gain(0)\n'
+    )
+    (file,) = music.export(code, str(tmp_path / "pad.wav"), cycles=4, tail=0).files
+    assert file.events == 257
+    with wave.open(file.path, "rb") as source:
+        source.setpos(int(3.5 * 44100))
+        frames = source.readframes(4410)
+    values = [abs(int.from_bytes(frames[i : i + 2], "little", signed=True)) for i in range(0, len(frames), 4)]
+    assert max(values) > 1000
+
+
+def test_a_chord_that_strudel_does_not_know_is_a_warning_every_time(music):
+    code = 'setcpm(30)\n$: chord("<Cmaj7 Am7>").voicing().s("sine")'
+    for _ in range(2):
+        assert any('unknown chord "Cmaj7"' in warning for warning in music.check(code).warnings)
