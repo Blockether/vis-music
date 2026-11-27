@@ -1,0 +1,19 @@
+{
+  "name": "vis-music-engine",
+  "private": true,
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "description": "The music engine of vis-music: Strudel patterns played and rendered by dough.",
+  "scripts": {
+    "build": "esbuild engine.mjs --bundle --platform=node --format=esm --target=node18 --outfile=../src/vis_music/engine/engine.mjs --legal-comments=eof --log-level=warning"
+  },
+  "dependencies": {
+    "@strudel/core": "1.2.6",
+    "@strudel/mini": "1.2.6",
+    "@strudel/transpiler": "1.2.6",
+    "@strudel/tonal": "1.2.6"
+  },
+  "devDependencies": {
+    "esbuild": "0.25.12"
+  }
+}
