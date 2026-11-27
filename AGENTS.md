@@ -13,3 +13,4 @@
   device, set `VIS_MUSIC_NO_AUDIO=1`: the play test then checks the error.
 - Tracks are Strudel code. Keep Strudel behavior: labels, `_` mute, `S` solo,
   `setcps`/`setcpm`.
+- `VIS_MUSIC_DEBUG=1` makes the engine print the stack of a failed request to its log.

@@ -99,7 +99,7 @@ class MusicTools:
         return TrackInfo(
             source=source,
             cps=answer["cps"],
-            layers=_layers(answer.get("layers")),
+            layers=_layers({**row, "playing": False} for row in answer.get("layers") or ()),
             events_in_4_cycles=int(answer.get("events_in_4_cycles") or 0),
             warnings=tuple(answer.get("warnings") or ()),
         )

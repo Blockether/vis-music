@@ -76,13 +76,28 @@ export const isMuted = (name) => name.startsWith('_') || name.endsWith('_');
 export const isSolo = (name) => name.length > 1 && name.startsWith('S');
 
 // Compiles code into its layers. Throws with Strudel's own message on an error.
+// The transpiler reads every double-quoted string as mini-notation, so
+// samples("github:owner/repo") fails on its "/". A sample source is a plain
+// string: give samples(...) its first argument in single quotes.
+const plainSampleSources = (code) =>
+  code.replace(/\bsamples\(\s*"([^"\\\n]*)"/g, (_, source) => `samples('${source.replace(/'/g, "\\'")}'`);
+
+// Strudel methods that only draw in the browser. Here they draw nothing, so a
+// track copied from strudel.cc still plays.
+const VISUALS = ['pianoroll', 'punchcard', 'spiral', 'scope', 'tscope', 'fscope', 'spectrum', 'pitchwheel', 'wordfall', 'markcss', 'draw'];
+for (const name of VISUALS) {
+  for (const key of [name, `_${name}`]) {
+    if (!Pattern.prototype[key]) Pattern.prototype[key] = function () { return this; };
+  }
+}
+
 export async function compile(code, sounds) {
   if (!scopeReady) scopeReady = scope(sounds);
   await scopeReady;
   context = { layers: new Map(), anonymous: 0, cps: null, all: [], each: null, pending: [] };
   const mine = context;
   try {
-    const { pattern } = await evaluate(code, transpiler);
+    const { pattern } = await evaluate(plainSampleSources(code), transpiler);
     await Promise.all(mine.pending);
     if (!mine.layers.size && pattern && pattern._Pattern) mine.layers.set('main', pattern);
     return {

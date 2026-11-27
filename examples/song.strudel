@@ -1,0 +1,14 @@
+// A short song in sections with arrange(): intro, verse, drop and outro, 16 bars.
+setcpm(122/4)
+const kick = s("bd*4").bank("RolandTR909")
+const hats = s("[~ hh]*4, hh*16").bank("RolandTR909").gain(".5 .3")
+const clap = s("~ cp ~ cp").bank("RolandTR909")
+const bass = note("<c2 c2 ab1 bb1>*4").s("sawtooth").lpf(800).decay(.15).sustain(.4).gain(1)
+const keys = chord("<Cm7 Cm7 Abmaj7 Bb7>").voicing().s("piano").room(.4).gain(.6)
+const lead = n("<[0 2 4 7] [7 4 2 0] [5 4 2 4] [2 ~ 0 ~]>*2").scale("C4:minor").s("square").lpf(2500).delay(.3).gain(.4)
+song: arrange(
+  [4, stack(keys, hats.gain(.3))],
+  [4, stack(kick, hats, keys, bass)],
+  [4, stack(kick, hats, clap, keys, bass, lead)],
+  [4, stack(keys.room(.9), lead.degradeBy(.5))],
+).gain(.65)

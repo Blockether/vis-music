@@ -294,6 +294,7 @@ createInterface({ input: process.stdin }).on('line', (line) => {
       if (!op) throw new Error(`unknown op ${req.op}`);
       answer = { id: req.id, ok: true, ...(await op(req)) };
     } catch (e) {
+      if (process.env.VIS_MUSIC_DEBUG) console.error(e?.stack || e);
       answer = { id: req.id, ok: false, error: String(e?.message || e) };
     }
     process.stdout.write(JSON.stringify(answer) + '\n');

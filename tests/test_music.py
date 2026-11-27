@@ -194,3 +194,19 @@ def test_samples_that_load_together_keep_their_own_sound(music, tmp_path):
     assert alone[0] > 0.1
     assert render('a: s("loud*4")\nb: s("silent*4")') == alone
     assert render('b: s("silent*4")\na: s("loud*4")') == alone
+
+
+def test_a_double_quoted_sample_source_is_a_plain_string(music, tmp_path):
+    import json
+
+    from conftest import write_click
+
+    write_click(tmp_path / "click.wav")
+    (tmp_path / "strudel.json").write_text(json.dumps({"_base": tmp_path.as_uri() + "/", "tick": ["click.wav"]}))
+    info = music.check(f'samples("{(tmp_path / "strudel.json").as_uri()}")\n$: s("tick*4")')
+    assert info.warnings == () and info.events_in_4_cycles == 16
+
+
+def test_visual_methods_from_strudel_cc_draw_nothing(music):
+    info = music.check('note("c3 e3").s("sine").pianoroll()._punchcard({ labels: 1 }).scope()')
+    assert info.events_in_4_cycles == 8

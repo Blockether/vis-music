@@ -28712,13 +28712,22 @@ function scope(sounds2) {
 }
 var isMuted = (name) => name.startsWith("_") || name.endsWith("_");
 var isSolo = (name) => name.length > 1 && name.startsWith("S");
+var plainSampleSources = (code) => code.replace(/\bsamples\(\s*"([^"\\\n]*)"/g, (_3, source) => `samples('${source.replace(/'/g, "\\'")}'`);
+var VISUALS = ["pianoroll", "punchcard", "spiral", "scope", "tscope", "fscope", "spectrum", "pitchwheel", "wordfall", "markcss", "draw"];
+for (const name of VISUALS) {
+  for (const key of [name, `_${name}`]) {
+    if (!Pattern.prototype[key]) Pattern.prototype[key] = function() {
+      return this;
+    };
+  }
+}
 async function compile(code, sounds2) {
   if (!scopeReady) scopeReady = scope(sounds2);
   await scopeReady;
   context = { layers: /* @__PURE__ */ new Map(), anonymous: 0, cps: null, all: [], each: null, pending: [] };
   const mine = context;
   try {
-    const { pattern } = await evaluate(code, F2);
+    const { pattern } = await evaluate(plainSampleSources(code), F2);
     await Promise.all(mine.pending);
     if (!mine.layers.size && pattern && pattern._Pattern) mine.layers.set("main", pattern);
     return {
@@ -29061,6 +29070,7 @@ createInterface2({ input: process.stdin }).on("line", (line) => {
       if (!op2) throw new Error(`unknown op ${req.op}`);
       answer = { id: req.id, ok: true, ...await op2(req) };
     } catch (e) {
+      if (process.env.VIS_MUSIC_DEBUG) console.error(e?.stack || e);
       answer = { id: req.id, ok: false, error: String(e?.message || e) };
     }
     process.stdout.write(JSON.stringify(answer) + "\n");

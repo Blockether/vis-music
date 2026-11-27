@@ -30,6 +30,10 @@ music.export("songs/acid.strudel", "out/acid.wav", stems=True)  # acid.drums.wav
 | `jazz.strudel` | Jazz waltz | rim and hi-hat, walking bass, piano comping, saxophone |
 | `ambient.strudel` | Ambient, 60 BPM | sine pads, kalimba arpeggio, triangle shimmer |
 | `chiptune.strudel` | 8-bit, 150 BPM | square lead, pulse bass, noise hats, triangle kick |
+| `techno.strudel` | Minimal techno, 130 BPM | Euclidean 909 rhythms, `jux(rev)` hats, FM bells with delay, sine sub |
+| `breakbeat.strudel` | Breakbeat, 170 BPM | amen break slices from Dirt-Samples, detuned reese bass, pads |
+| `synthwave.strudel` | Synthwave, 100 BPM | LinnDrum, octave bass, gated chords with chorus, lead with `off` echoes |
+| `song.strudel` | A song in sections, 122 BPM | `arrange()` of intro, verse, drop and outro over 16 bars |
 
 ## Tools
 
@@ -46,6 +50,30 @@ music.export("songs/acid.strudel", "out/acid.wav", stems=True)  # acid.drums.wav
 A track is a file path or the code itself. Layers are Strudel labels: `drums:`
 or `$:`. A label that starts or ends with `_` is muted; one that starts with `S`
 plays solo.
+
+## Limitations
+
+- **Sound engine.** dough, the synthesizer of Strudel, plays the sound, not the
+  Web Audio engine of strudel.cc. A track sounds close to strudel.cc, not the
+  same. dough does not play `vowel`, `shape`, `cut`, `squiz`, `size`/`dry`,
+  `detune`, `compressor`, `duckorbit` or `unit` (so `loopAt` and `fit` do not
+  fit the sample to the cycle). `supersaw` plays as `sawtooth`. `music.check`
+  warns about each control that does not play.
+- **Sounds.** The sample maps of strudel.cc load: drum machines, piano, VCSL
+  instruments and the Dirt subset, plus any map that `samples(...)` names. The
+  General MIDI soundfonts (`gm_*`) are not available.
+- **Visuals and outputs.** `pianoroll`, `punchcard`, `scope` and the other
+  visual methods draw nothing. `.midi()`, OSC and the microphone are not
+  available.
+- **Live playback.** It needs an audio output device. A changed track takes over
+  on time; the engine sends notes 0.25 s ahead, so a change is heard after about
+  that delay. One track plays at a time.
+- **First use.** Samples download on first use, so the first play or export of
+  a new sound takes longer. After that they come from the cache, also offline.
+- **Size.** An export streams to its file, so its length has no limit; it renders
+  about 6 times faster than real time (6 minutes in about 1 minute). One render
+  or live session holds at most 4096 different sample files, about 200 MB of
+  decoded samples, and 128 notes that sound at the same time.
 
 ## How it works
 
