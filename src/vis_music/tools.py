@@ -136,7 +136,8 @@ class MusicTools:
 
         The sound goes on until `music.stop()`. A second play replaces the
         playing track on the next beat without a gap, so call it again after each
-        change, or with other `layers` to hear one part alone.
+        change, or with other `layers` to hear one part alone. Visual methods
+        draw nothing; `.midi()`, OSC and the microphone do not play.
         """
         code, source = self._source(track)
         answer = self._engine.request("play", timeout_s=300, code=code, layers=string_list(layers), cps=float(cps or 0))
@@ -261,7 +262,11 @@ class MusicTools:
         limit: Annotated[int, "Most names to return."] = 300,
     ) -> SoundList:
         """Sounds a track can name with `s`, as `name:files`, and the drum
-        machine banks for `.bank(...)`."""
+        machine banks for `.bank(...)`.
+
+        superdough, the engine of strudel.cc, plays every synth, effect,
+        soundfont (`gm_*`) and ZZFX sound.
+        """
         answer = self._engine.request("sounds", timeout_s=300, filter=filter, refresh=bool(refresh), limit=int(limit))
         return SoundList(
             total=int(answer.get("total") or 0),

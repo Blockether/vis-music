@@ -2582,15 +2582,15 @@ wheels = [
 
 [[package]]
 name = "vis-lang-interface"
-version = "4.2.3"
-source = { git = "https://github.com/Blockether/vis-lang-interface?rev=v4.2.3#22e014b7ce101ce558e7e1259b982b8c5537ae3f" }
+version = "4.3.0"
+source = { git = "https://github.com/Blockether/vis-lang-interface?rev=v4.3.0#7ec89c77a69774ab91f107feef9fefbb20e0c204" }
 dependencies = [
     { name = "vis-agent" },
 ]
 
 [[package]]
 name = "vis-music"
-version = "0.1.0"
+version = "0.2.0"
 source = { virtual = "." }
 dependencies = [
     { name = "lameenc", marker = "sys_platform != 'win32'" },
@@ -2610,7 +2610,7 @@ requires-dist = [
     { name = "lameenc", marker = "sys_platform != 'win32'", specifier = ">=1.7" },
     { name = "nodejs-wheel-binaries", specifier = ">=22" },
     { name = "vis-agent", specifier = ">=0.5.30" },
-    { name = "vis-lang-interface", git = "https://github.com/Blockether/vis-lang-interface?rev=v4.2.3" },
+    { name = "vis-lang-interface", git = "https://github.com/Blockether/vis-lang-interface?rev=v4.3.0" },
 ]
 
 [package.metadata.requires-dev]

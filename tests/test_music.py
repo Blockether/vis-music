@@ -73,6 +73,16 @@ def test_events_of_one_layer(music, track):
         music.events(track, layers=["nope"])
 
 
+def test_a_printed_result_is_short_and_names_the_field_with_the_rest(music, track):
+    events = music.events(track, end=8)
+    shown = str(events)
+    assert shown.splitlines()[0] == "64 notes at 0.5 cps, layers: drums, lead"
+    assert shown.splitlines()[2] == "0 drums s=click"
+    assert shown.splitlines()[-1] == "+24 more (read .events)"
+    assert len(shown) < len(repr(events)) / 4
+    assert str(music.check(track)).splitlines()[1] == "Layers: drums, lead, _off (muted)"
+
+
 def test_export_wav_renders_the_unmuted_layers(music, track, tmp_path):
     result = music.export(track, str(tmp_path / "out" / "demo.wav"), cycles=4, tail=1)
     (file,) = result.files

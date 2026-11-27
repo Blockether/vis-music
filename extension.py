@@ -7,9 +7,10 @@ import blockether.vis.extension as vis
 from vis_lang_interface import presentation
 
 from vis_music.engine import cache_dir
+from vis_music.results import size_text
 from vis_music.tools import MusicTools
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 MAX_ROWS = 40
 
 
@@ -69,10 +70,6 @@ def _events(label, result):
     )
 
 
-def _size(count):
-    return f"{count / 1_000_000:.1f} MB" if count >= 1_000_000 else f"{count / 1000:.0f} kB"
-
-
 def _export(label, result):
     content = []
     for f in result.files:
@@ -89,7 +86,7 @@ def _export(label, result):
                     f"{f.seconds:.1f}",
                     f"{f.peak:.2f}",
                     f"{f.rms:.3f}",
-                    _size(f.size_bytes),
+                    size_text(f.size_bytes),
                 )
                 for f in result.files
             ),
@@ -162,17 +159,13 @@ def _signature(verb):
 
 PROMPT = "\n".join(
     [
-        "music surface active — compose, play and export music. A track is Strudel code; each tool takes a track file path or the code:",
+        "music surface active — a track is Strudel code; each tool takes a track file path or the code:",
         *(_signature(verb) for verb in VERBS),
-        'Write a track as named layers, one pattern each: `setcpm(120/4)`, then `drums: s("bd*4, [~ sd]*2, hh*8").bank("RolandTR909")`,'
-        ' `bass: note("c2 [~ c2] eb2 g1").s("sawtooth").lpf(800)`. A label that starts or ends with `_` is muted; one that starts with `S` plays solo.',
-        "Run `music.check` after each change; it names unknown sounds. `music.save` writes a `.strudel` file only when the track compiles.",
-        "`music.play` returns at once and the sound goes on until `music.stop()`. Play again after a change: the new code takes over without a gap."
-        " Pass `layers=[...]` to hear some layers alone.",
-        '`music.export(track, "out/song.mp3")` renders offline to wav, mp3, flac, ogg, opus or m4a; `stems=True` writes one file for each layer.'
-        " Vis shows a player for each exported file.",
-        '`music.sounds("piano|bd")` lists sample names, drum machine banks and synths. superdough, the engine of strudel.cc, plays every synth,'
-        " effect, soundfont (`gm_*`) and ZZFX sound. Visual methods draw nothing; `.midi()`, OSC and the microphone do not play.",
+        'Write a track as named layers, one pattern each: `setcpm(120/4)`, `drums: s("bd*4, hh*8").bank("RolandTR909")`,'
+        ' `bass: note("c2 eb2 g1").s("sawtooth")`. A label that starts or ends with `_` is muted; one that starts with `S` plays solo.',
+        "Run `music.check` after each change; it names unknown sounds. `music.play` returns at once: play again to change"
+        " the sound, and `music.stop()` ends it.",
+        '`music.export` writes wav, mp3, flac, ogg, opus or m4a. `music.sounds("piano|bd")` finds sample names and banks.',
     ]
 )
 

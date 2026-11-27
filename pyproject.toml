@@ -1,13 +1,13 @@
 [project]
 name = "vis-music"
-version = "0.1.0"
+version = "0.2.0"
 description = "Compose music for Vis as Strudel code: play it live layer by layer and export WAV, MP3 or stems."
-keywords = ["music", "strudel", "audio", "synthesizer"]
+keywords = ["media", "music"]
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.12"
 dependencies = [
   "vis-agent>=0.5.30",
-  "vis-lang-interface @ git+https://github.com/Blockether/vis-lang-interface@v4.2.3",
+  "vis-lang-interface @ git+https://github.com/Blockether/vis-lang-interface@v4.3.0",
   "nodejs-wheel-binaries>=22",
   "lameenc>=1.7; sys_platform != 'win32'",
 ]
