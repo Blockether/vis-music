@@ -37,6 +37,7 @@ class Playback:
     cps: Annotated[float | None, "Cycles per second of the playing track."]
     layers: tuple[Layer, ...]
     events_sent: Annotated[int, "Notes sent to the synthesizer since play."] = 0
+    output: Annotated[str, "Audio backend that plays, such as Core Audio; empty when silent."] = ""
     warnings: tuple[str, ...] = ()
     source: Annotated[str, "Track file or `code`; empty when unknown."] = ""
     is_changed: Annotated[bool, "The call replaced a playing track without a gap."] = False

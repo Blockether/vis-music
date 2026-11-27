@@ -112,6 +112,13 @@ def test_sounds_lists_the_synths(music):
     assert {"sawtooth", "sine", "square", "triangle"} <= set(music.sounds().synths)
 
 
+@pytest.mark.skipif(not os.environ.get("VIS_MUSIC_NO_AUDIO"), reason="this machine has an audio device")
+def test_play_without_an_audio_device_says_so(music, track):
+    with pytest.raises(MusicError, match="no audio output device"):
+        music.play(track)
+    assert music.status().is_playing is False
+
+
 @pytest.mark.skipif(bool(os.environ.get("VIS_MUSIC_NO_AUDIO")), reason="no audio device")
 def test_play_switches_layers_without_a_restart_and_stops(music, track):
     started = music.play(track.replace(".gain(.4)", ".gain(0)"), layers=["lead"])
@@ -120,6 +127,7 @@ def test_play_switches_layers_without_a_restart_and_stops(music, track):
     switched = music.play(track.replace(".gain(.4)", ".gain(0)"), layers=["drums"])
     assert switched.is_changed and switched.cycle >= 0.4
     assert [layer.name for layer in switched.layers if layer.is_playing] == ["drums"]
-    assert music.status().events_sent > 0
-    assert music.stop().is_playing is False
+    assert music.status().events_sent > 0 and music.status().output
+    stopped = music.stop()
+    assert stopped.is_playing is False and not any(layer.is_playing for layer in stopped.layers)
     assert music.status().is_playing is False

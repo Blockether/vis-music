@@ -57,7 +57,15 @@ export class Doughbox {
 
   async start() {
     const answer = await this.ask('start');
-    if (answer[1] !== 'ok') throw new Error('cannot open the audio output device');
+    if (answer[1] === 'ok') {
+      this.backend = answer.slice(2).join(' ');
+      return;
+    }
+    throw new Error(
+      answer[2] === 'no-audio-device'
+        ? 'no audio output device on this machine: music.play needs speakers; music.export still works'
+        : 'cannot open the audio output device',
+    );
   }
 
   async render(seconds, path) {

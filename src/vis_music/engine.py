@@ -108,10 +108,18 @@ def node():
 
 def _command():
     """The argv that starts the engine."""
-    command = [node(), BUNDLE, "--doughbox", doughbox(), "--cache", cache_dir() / "sounds"]
+    box = doughbox()
+    command = [node(), BUNDLE, "--doughbox", box, "--cache", cache_dir() / "sounds", "--build", _build(box)]
     if os.environ.get("VIS_MUSIC_OFFLINE"):
         command.append("--offline")
     return [str(part) for part in command]
+
+
+def _build(box):
+    """A fingerprint of the engine files. A kept engine of an older build is
+    replaced, because its command differs."""
+    stats = [os.stat(path) for path in (BUNDLE, box)]
+    return hashlib.sha256(repr([(s.st_size, s.st_mtime_ns) for s in stats]).encode()).hexdigest()[:12]
 
 
 def _shell_id():

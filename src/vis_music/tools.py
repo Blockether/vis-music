@@ -50,6 +50,7 @@ def _playback(answer, source=""):
         cps=answer.get("cps"),
         layers=_layers(answer.get("layers")),
         events_sent=int(answer.get("events_sent") or 0),
+        output=str(answer.get("output") or ""),
         warnings=tuple(answer.get("warnings") or ()),
         source=source,
         is_changed=bool(answer.get("changed")),

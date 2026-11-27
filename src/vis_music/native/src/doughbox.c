@@ -9,7 +9,7 @@
 //
 //   ping                      -> @pong
 //   load <file> <freq> <path> -> @load <file> ok <frames> | @load <file> fail
-//   start                     -> @start ok | @start fail
+//   start                     -> @start ok <backend> | @start fail <why>
 //   stop                      -> @stop ok
 //   now                       -> @now <seconds>   (the clock of "time" values)
 //   ev <message>              (no answer) play or schedule a dough message now
@@ -74,6 +74,12 @@ static int box_start(void)
   config.dataCallback = box_callback;
   if (ma_device_init(NULL, &config, &box_device) != MA_SUCCESS)
     return -1;
+  if (box_device.pContext->backend == ma_backend_null)
+  {
+    // miniaudio falls back to a silent device when the machine has none.
+    ma_device_uninit(&box_device);
+    return -2;
+  }
   box_frame = 0;
   box_origin = box_wallclock();
   if (ma_device_start(&box_device) != MA_SUCCESS)
@@ -291,7 +297,13 @@ int main(void)
     else if (strncmp(line, "render ", 7) == 0)
       box_render(line + 7);
     else if (strcmp(line, "start") == 0)
-      printf(box_start() == 0 ? "@start ok\n" : "@start fail\n");
+    {
+      int started = box_start();
+      if (started == 0)
+        printf("@start ok %s\n", ma_get_backend_name(box_device.pContext->backend));
+      else
+        printf("@start fail %s\n", started == -2 ? "no-audio-device" : "cannot-open-device");
+    }
     else if (strcmp(line, "stop") == 0)
     {
       box_stop();

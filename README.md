@@ -55,8 +55,9 @@ python scripts/build.py native    # macOS cc; Zig for Linux and Windows
 vis-agent extension install . --trust --global --save
 ```
 
-Set `VIS_MUSIC_NO_AUDIO=1` to skip the live playback test on a machine without
-an audio device.
+On a machine without an audio device, `music.play` fails with a clear error and
+`music.export` still works. Set `VIS_MUSIC_NO_AUDIO=1` there: the tests then
+check that error instead of live playback.
 
 ## License
 

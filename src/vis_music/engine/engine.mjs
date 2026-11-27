@@ -20026,7 +20026,13 @@ var Doughbox = class {
   }
   async start() {
     const answer = await this.ask("start");
-    if (answer[1] !== "ok") throw new Error("cannot open the audio output device");
+    if (answer[1] === "ok") {
+      this.backend = answer.slice(2).join(" ");
+      return;
+    }
+    throw new Error(
+      answer[2] === "no-audio-device" ? "no audio output device on this machine: music.play needs speakers; music.export still works" : "cannot open the audio output device"
+    );
   }
   async render(seconds, path) {
     const answer = await this.ask(`render ${seconds} ${path}`);
@@ -28884,8 +28890,14 @@ async function play({ code, layers = [], cps }) {
   const chosen = select(track, layers);
   const newCps = Number(cps) > 0 ? Number(cps) : track.cps;
   if (!live.box || live.box.exited) {
-    live.box = new Doughbox(BINARY);
-    await live.box.start();
+    const box = new Doughbox(BINARY);
+    try {
+      await box.start();
+    } catch (error) {
+      await box.quit();
+      throw error;
+    }
+    live.box = box;
   }
   const running = !!live.timer;
   const now = nowS();
@@ -28928,8 +28940,9 @@ function status() {
     playing,
     cycle: playing ? Math.max(0, cycleAt(nowS())) : null,
     cps: live.cps,
-    layers: live.track ? describe(live.track, live.layers).layers : [],
+    layers: live.track ? describe(live.track, playing ? live.layers : []).layers : [],
     events_sent: live.sent,
+    output: live.box && !live.box.exited ? live.box.backend : null,
     warnings: live.warn.list()
   };
 }

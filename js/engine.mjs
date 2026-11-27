@@ -125,8 +125,14 @@ async function play({ code, layers = [], cps }) {
   const chosen = select(track, layers);
   const newCps = Number(cps) > 0 ? Number(cps) : track.cps;
   if (!live.box || live.box.exited) {
-    live.box = new Doughbox(BINARY);
-    await live.box.start();
+    const box = new Doughbox(BINARY);
+    try {
+      await box.start();
+    } catch (error) {
+      await box.quit();
+      throw error;
+    }
+    live.box = box;
   }
   const running = !!live.timer;
   const now = nowS();
@@ -173,8 +179,9 @@ function status() {
     playing,
     cycle: playing ? Math.max(0, cycleAt(nowS())) : null,
     cps: live.cps,
-    layers: live.track ? describe(live.track, live.layers).layers : [],
+    layers: live.track ? describe(live.track, playing ? live.layers : []).layers : [],
     events_sent: live.sent,
+    output: live.box && !live.box.exited ? live.box.backend : null,
     warnings: live.warn.list(),
   };
 }
