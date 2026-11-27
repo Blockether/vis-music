@@ -1,6 +1,6 @@
 """Build the generated part of vis-music.
 
-    python scripts/build.py    bundle js/ into src/vis_music/engine/engine.mjs
+python scripts/build.py    bundle js/ into src/vis_music/engine/engine.mjs
 """
 
 import subprocess

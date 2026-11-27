@@ -45,6 +45,7 @@ WEBAUDIO_PACKAGES = {
     ),
 }
 
+
 def cache_dir():
     """Where downloaded samples, renders and node-web-audio-api live."""
     named = os.environ.get("VIS_MUSIC_CACHE")
@@ -125,6 +126,7 @@ def _install_webaudio(home):
     finally:
         shutil.rmtree(partial, ignore_errors=True)
     return home
+
 
 def node():
     """The Node.js binary: the bundled wheel, else `node` on PATH."""
