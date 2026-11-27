@@ -131,3 +131,22 @@ def test_play_switches_layers_without_a_restart_and_stops(music, track):
     stopped = music.stop()
     assert stopped.is_playing is False and not any(layer.is_playing for layer in stopped.layers)
     assert music.status().is_playing is False
+
+
+def test_a_prebuild_without_the_executable_bit_runs_from_a_cache_copy(tmp_path, monkeypatch):
+    from vis_music import engine
+
+    monkeypatch.setenv("VIS_MUSIC_CACHE", str(tmp_path / "cache"))
+    native = tmp_path / "native"
+    source = engine.NATIVE / engine.platform_tag()
+    if not source.is_dir():
+        pytest.skip("no prebuild for this platform")
+    (native / engine.platform_tag()).mkdir(parents=True)
+    for binary in source.iterdir():
+        target = native / engine.platform_tag() / binary.name
+        target.write_bytes(binary.read_bytes())
+        target.chmod(0o644)
+    monkeypatch.setattr(engine, "NATIVE", native)
+    first = engine.doughbox()
+    assert first.parent == tmp_path / "cache" / "bin" / engine.platform_tag()
+    assert os.access(first, os.X_OK) and engine.doughbox() == first

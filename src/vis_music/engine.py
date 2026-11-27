@@ -43,12 +43,31 @@ def platform_tag():
     return f"{system}-{arch}"
 
 
+def _executable_copy(binary):
+    """An executable copy of `binary` in the cache, named by its content.
+
+    Vis can load an extension from a snapshot of its sources that drops the
+    executable bit, so the prebuild cannot run where it lies.
+    """
+    data = binary.read_bytes()
+    digest = hashlib.sha256(data).hexdigest()[:16]
+    copy = cache_dir() / "bin" / platform_tag() / f"{binary.stem}-{digest}{binary.suffix}"
+    if os.access(copy, os.X_OK):
+        return copy
+    copy.parent.mkdir(parents=True, exist_ok=True)
+    partial = copy.with_name(f".{copy.name}.{os.getpid()}.partial")
+    partial.write_bytes(data)
+    partial.chmod(0o755)
+    os.replace(partial, copy)
+    return copy
+
+
 def doughbox():
     """The doughbox binary: the prebuild for this platform, else one built here."""
     name = "doughbox.exe" if sys.platform == "win32" else "doughbox"
     prebuilt = NATIVE / platform_tag() / name
     if prebuilt.is_file():
-        return prebuilt
+        return prebuilt if os.access(prebuilt, os.X_OK) else _executable_copy(prebuilt)
     built = cache_dir() / "bin" / platform_tag() / name
     if built.is_file():
         return built
