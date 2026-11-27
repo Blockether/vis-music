@@ -7,7 +7,10 @@
 - Do not import `superdough/superdoughoutput.mjs` in `js/`: a second module copy
   makes "connect nodes from different contexts" errors.
 - Do not put "strudel" or "tidal" in a package or project name; the Strudel
-  authors ask for this. Ask the owner before you publish to GitHub.
+  authors ask for this.
+- A release is the tag `vVERSION`. Change `version` in `pyproject.toml` and
+  `VERSION` in `extension.py` together. The Vis Extension Center accepts at most
+  two `keywords`.
 - Tests: `uv run pytest`. They are offline. On a machine without an audio
   device, set `VIS_MUSIC_NO_AUDIO=1`: the play test then checks the error.
 - Tracks are Strudel code. Keep Strudel behavior: labels, `_` mute, `S` solo,
