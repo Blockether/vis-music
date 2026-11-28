@@ -10,7 +10,7 @@ from vis_music.engine import cache_dir
 from vis_music.results import size_text
 from vis_music.tools import MusicTools
 
-VERSION = "0.2.0"
+VERSION = "0.2.1"
 MAX_ROWS = 40
 
 
